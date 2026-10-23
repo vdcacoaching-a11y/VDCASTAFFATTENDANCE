@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>VISHAKAPATNAM DISTICT CRICKET ASSOCIATION</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:'Segoe UI',sans-serif; background:linear-gradient(135deg,#418EDE,#E55527); display:flex; justify-content:center; align-items:center; min-height:100vh; padding:15px; }
+    .card { background:white; padding:25px 20px 30px; border-radius:18px; width:100%; max-width:420px; box-shadow:0 15px 30px rgba(0,0,0,.2); text-align:center; }
+    h1 { color:#418EDE; margin:0 0 20px; font-size:20px; line-height:1.4; }
+    label { display:block; text-align:left; margin-top:12px; font-size:14px; font-weight:600; }
+    input,select { width:100%; padding:12px; margin:8px 0; border-radius:10px; border:1px solid #ddd; font-size:16px; }
+    video { display:block; width:100%; border-radius:12px; margin-top:15px; border:3px solid #418EDE; background:#172638; }
+    .btn { width:100%; padding:14px; margin-top:12px; border:0; border-radius:10px; font-weight:bold; cursor:pointer; font-size:15px; }
+    .clockin { background:#418EDE; color:white; }
+    .clockout { background:#E55527; color:white; }
+    .btn:disabled { opacity:.55; cursor:wait; }
+    #status { min-height:24px; font-size:14px; line-height:1.5; margin-top:14px; }
+    .footer { margin-top:20px; font-size:12px; color:#666; }
+  </style>
+</head>
+<body>
+<main class="card">
+  <!-- Add your association logo here when available. -->
+  <h1>VISHAKAPATNAM DISTICT CRICKET ASSOCIATION</h1>
+  <label for="name">Employee name</label>
+  <input type="text" id="name" placeholder="Enter employee name" autocomplete="name" maxlength="100" required>
+  <label for="area">Centre</label>
+  <select id="area" required>
+    <option value="">Select centre</option>
+    <option value="ACA VDCA B-GROUND">ACA VDCA B-GROUND</option>
+    <option value="MUNCIPAL STADIUM">MUNCIPAL STADIUM</option>
+    <option value="COROMANDEL GROUND">COROMANDEL GROUND</option>
+    <option value="HINDUSTAN ZINC GROUND">HINDUSTAN ZINC GROUND</option>
+    <option value="VDCA OFFICE">VDCA OFFICE</option>
+  </select>
+  <label for="session">Session</label>
+  <select id="session" required>
+    <option value="">Select session</option>
+    <option value="Morning">Morning</option>
+    <option value="Evening">Evening</option>
+  </select>
+  <video id="video" autoplay playsinline muted aria-label="Attendance camera preview"></video>
+  <button type="button" class="btn clockin" id="clockin">Clock In</button>
+  <button type="button" class="btn clockout" id="clockout">Clock Out</button>
+  <p id="status" role="status" aria-live="polite"></p>
+  <div class="footer">VDCA Staff Attendance System</div>
+</main>
+<script>
+"use strict";
+// Keep this URL if you update the same Apps Script deployment.
+// Replace it if you create a new deployment.
+const scriptURL = "https://script.google.com/macros/s/AKfycbz9eODq2buLCJO7Fo8X4z450KE2U5WA2cwauh0K3zEDi5hsuQV3omfZC2-_ue-EHIeMvQ/exec";
+const video = document.getElementById("video");
+const status = document.getElementById("status");
+const buttons = [document.getElementById("clockin"), document.getElementById("clockout")];
+let submitting = false;
+
+async function startCamera() {
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("Camera unavailable. Open the HTTPS website in your browser.");
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:"user", width:{ ideal:1280 }, height:{ ideal:720 } },
+      audio:false
+    });
+    video.srcObject = stream;
+    await video.play();
+    status.textContent = "Camera ready. Select your centre and session.";
+  } catch (error) {
+    status.textContent = "Camera unavailable. Allow camera permission and reload the page. " + error.message;
+  }
+}
+
+function getLocation() {
+  return new Promise((resolve,reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("GPS location is unavailable in this browser."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat:pos.coords.latitude, lng:pos.coords.longitude }),
+      error => reject(new Error(
+        error.code === 1 ? "Allow location permission to record attendance." :
+        error.code === 3 ? "Location timed out. Move to an open area and try again." :
+        "Unable to get your location. Check location services and try again."
+      )),
+      { enableHighAccuracy:true, timeout:20000, maximumAge:0 }
+    );
+  });
+}
+
+function capturePhoto(name,area,session,type,location) {
+  if (video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+    throw new Error("Camera is not ready. Allow camera access and wait for the preview.");
+  }
+  const canvas = document.createElement("canvas");
+  const scale = Math.min(1,1280/video.videoWidth);
+  const width = Math.round(video.videoWidth*scale);
+  const imageHeight = Math.round(video.videoHeight*scale);
+  const fontSize = Math.max(12,Math.round(width/42));
+  const lineHeight = Math.ceil(fontSize*1.5);
+  const padding = Math.max(10,Math.round(width/50));
+  const lines = [
+    "VISHAKAPATNAM DISTICT",
+    "CRICKET ASSOCIATION",
+    "Name: " + name,
+    "Centre: " + area,
+    "Session: " + session + " | " + type,
+    "Lat: " + location.lat.toFixed(6) + " | Lng: " + location.lng.toFixed(6),
+    "Time (IST): " + new Date().toLocaleString("en-IN",{ timeZone:"Asia/Kolkata" })
+  ];
+  canvas.width = width;
+  canvas.height = imageHeight + padding*2 + lines.length*lineHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Unable to capture photo in this browser.");
+  ctx.drawImage(video,0,0,width,imageHeight);
+  ctx.fillStyle = "#172638";
+  ctx.fillRect(0,imageHeight,width,canvas.height-imageHeight);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = fontSize + "px Arial";
+  ctx.textBaseline = "top";
+  lines.forEach((line,index) => {
+    ctx.fillText(line,padding,imageHeight+padding+index*lineHeight,width-padding*2);
+  });
+  return canvas.toDataURL("image/jpeg",0.8).split(",")[1];
+}
+
+async function clock(type) {
+  if (submitting) return;
+  const name = document.getElementById("name").value.trim();
+  const area = document.getElementById("area").value;
+  const session = document.getElementById("session").value;
+  if (!name) { status.textContent = "Enter employee name."; return; }
+  if (!area) { status.textContent = "Select centre."; return; }
+  if (!session) { status.textContent = "Select session."; return; }
+  if (video.readyState < 2 || !video.videoWidth) {
+    status.textContent = "Wait for the camera preview before submitting.";
+    return;
+  }
+  submitting = true;
+  buttons.forEach(button => { button.disabled = true; });
+  let requestStarted = false;
+  try {
+    status.textContent = "Getting GPS location…";
+    const location = await getLocation();
+    const photo = capturePhoto(name,area,session,type,location);
+    status.textContent = "Saving attendance. Please wait…";
+    requestStarted = true;
+    const response = await fetch(scriptURL,{
+      method:"POST",
+      // Plain text carries JSON to doPost(e) without an application/json preflight.
+      headers:{ "Content-Type":"text/plain;charset=UTF-8" },
+      body:JSON.stringify({ name,area,type,session,lat:location.lat,lng:location.lng,photo })
+    });
+    if (!response.ok) throw new Error("Server returned HTTP " + response.status);
+    const message = (await response.text()).trim();
+    if (message !== "Attendance Successful") {
+      status.textContent = message.startsWith("Error:") ||
+        message === "Missing required fields" ||
+        message.startsWith("Invalid")
+        ? message
+        : "Unexpected server response. Ask your administrator to check the deployment.";
+      return;
+    }
+    status.textContent = type + " recorded successfully — " + area + " (" + session + ").";
+  } catch (error) {
+    status.textContent = requestStarted
+      ? "Could not confirm whether attendance was saved. Ask your administrator to check before submitting again. " + error.message
+      : error.message;
+  } finally {
+    submitting = false;
+    buttons.forEach(button => { button.disabled = false; });
+  }
+}
+buttons[0].addEventListener("click",() => clock("Clock In"));
+buttons[1].addEventListener("click",() => clock("Clock Out"));
+startCamera();
+</script>
+</body>
+</html>
